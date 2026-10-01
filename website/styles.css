@@ -453,16 +453,15 @@ a { color: inherit; }
 .address {
   margin-top: 28px;
   display: inline-flex;
-  align-items: center;
-  gap: 16px;
+  flex-direction: column;
+  align-items: flex-start;
   max-width: 100%;
-  padding: 12px 12px 12px 22px;
+  padding: 16px 20px 18px;
   background: var(--card);
   border: 3px solid var(--line);
   border-radius: 18px;
   box-shadow: 6px 6px 0 var(--green);
 }
-.address__text { display: flex; flex-direction: column; min-width: 0; }
 .address__label {
   font-size: 12px;
   font-weight: 900;
@@ -471,6 +470,7 @@ a { color: inherit; }
   color: var(--ink-soft);
 }
 .address__ip {
+  max-width: 100%;
   font-size: clamp(22px, 3vw, 30px);
   font-weight: 900;
   line-height: 1.2;
@@ -481,13 +481,20 @@ a { color: inherit; }
   text-overflow: ellipsis;
   transition: color 0.15s;
 }
+.address__port { color: var(--green); }
+.address__btns {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 .address__ip:hover { color: var(--green); }
 
 /* ---------- Copy button (uiverse.io / fabiodevbr / shy-termite-9) ---------- */
 .copy-btn {
   position: relative;
   flex-shrink: 0;
-  width: 116px;
+  width: 132px;
   height: 46px;
   background-color: var(--mint);
   border: 3px solid var(--line);
@@ -525,7 +532,7 @@ a { color: inherit; }
 }
 .copy-btn.copied {
   background-color: #0e3d24;
-  width: 128px;
+  width: 144px;
   transition-delay: 0.05s;
 }
 .copy-btn.copied span:first-child {
@@ -1345,8 +1352,7 @@ a { color: inherit; }
   .nav__links { display: none; }
   .hero { padding: 36px 0 130px; }
   .steps { grid-template-columns: 1fr; gap: 34px; }
-  .address { display: flex; flex-wrap: wrap; padding: 12px 14px; }
-  .address__text { flex: 1 1 180px; }
+  .address { display: flex; padding: 14px 16px 16px; }
   .live__num { font-size: 104px; }
   .hero__steve { height: 170px; bottom: 90px; right: 2%; }
   .hero__art { display: none; }

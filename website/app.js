@@ -66,19 +66,21 @@
     el._copyTimer = setTimeout(function () { el.classList.remove("copied"); }, 1800);
   }
 
-  function handleCopy(btn) {
-    copyText(ADDRESS).then(function () {
+  function handleCopy(btn, text) {
+    text = text || ADDRESS;
+    copyText(text).then(function () {
       if (btn) flash(btn);
-      showToast("Copied " + ADDRESS);
+      showToast("Copied " + text);
     }, function () {
-      showToast("Could not copy. The address is " + ADDRESS);
+      showToast("Could not copy. Here it is: " + text);
     });
   }
 
-  var mainCopy = $(".js-copy");
-  if (mainCopy) mainCopy.addEventListener("click", function () { handleCopy(mainCopy); });
+  $$(".js-copy").forEach(function (btn) {
+    btn.addEventListener("click", function () { handleCopy(btn, btn.dataset.copy); });
+  });
   $$(".js-copy-text").forEach(function (el) {
-    el.addEventListener("click", function () { handleCopy(mainCopy); });
+    el.addEventListener("click", function () { handleCopy($(".js-copy"), el.dataset.copy); });
   });
   $$(".js-copy-mini").forEach(function (btn) {
     btn.addEventListener("click", function () {
