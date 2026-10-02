@@ -1,0 +1,30 @@
+{
+  "redirects": [
+    { "source": "/", "has": [{ "type": "host", "value": "admin.berojgar.fun" }], "destination": "/admin/", "permanent": false },
+    { "source": "/admin/:path*", "has": [{ "type": "host", "value": "www.berojgar.fun" }], "destination": "https://admin.berojgar.fun/admin/:path*", "permanent": false }
+  ],
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/main?__route=:path*" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" }
+      ]
+    },
+    {
+      "source": "/admin/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+        { "key": "Cache-Control", "value": "no-cache" }
+      ]
+    }
+  ],
+  "functions": {
+    "api/main.js": { "maxDuration": 15 }
+  }
+}

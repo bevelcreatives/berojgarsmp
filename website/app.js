@@ -9,6 +9,85 @@
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
 
+  // The admin panel opens the site with ?edit=1 inside its editor.
+  var EDIT_MODE = /[?&]edit=1(&|$)/.test(location.search);
+
+  function store(key, value) {
+    try {
+      if (value === undefined) return JSON.parse(localStorage.getItem(key) || "null");
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) { return null; }
+  }
+
+  /* ---------------- Stats tracking ---------------- */
+  function track(events) {
+    if (EDIT_MODE) return;
+    var body = JSON.stringify({ e: [].concat(events) });
+    try {
+      if (navigator.sendBeacon && navigator.sendBeacon("/api/track", new Blob([body], { type: "text/plain" }))) return;
+    } catch (e) {}
+    fetch("/api/track", { method: "POST", body: body, keepalive: true }).catch(function () {});
+  }
+
+  (function trackVisit() {
+    var today = new Date().toISOString().slice(0, 10);
+    var events = ["page_view"];
+    if (store("bj_last_visit") !== today) {
+      events.push("visitor");
+      store("bj_last_visit", today);
+    }
+    track(events);
+  })();
+
+  document.addEventListener("click", function (e) {
+    var el = e.target.closest && e.target.closest("[data-track]");
+    if (el) track(el.getAttribute("data-track"));
+  });
+
+  /* ---------------- Editable content (set from the admin panel) ---------------- */
+  var defaults = { text: {}, img: {} };
+  $$("[data-edit]").forEach(function (el) {
+    var k = el.getAttribute("data-edit");
+    if (!(k in defaults.text)) defaults.text[k] = el.innerHTML;
+  });
+  $$("[data-edit-img]").forEach(function (el) {
+    var k = el.getAttribute("data-edit-img");
+    if (!(k in defaults.img)) defaults.img[k] = el.getAttribute("src");
+  });
+
+  var applied = {};
+  function setKey(key, entry) {
+    if (entry && entry.k === "img") {
+      $$('[data-edit-img="' + key + '"]').forEach(function (img) { img.src = entry.v; });
+    } else if (entry) {
+      $$('[data-edit="' + key + '"]').forEach(function (el) { el.innerHTML = entry.v; });
+    } else {
+      if (key in defaults.text) $$('[data-edit="' + key + '"]').forEach(function (el) { el.innerHTML = defaults.text[key]; });
+      if (key in defaults.img) $$('[data-edit-img="' + key + '"]').forEach(function (img) { img.src = defaults.img[key]; });
+    }
+  }
+  function applyContent(map) {
+    map = map || {};
+    Object.keys(applied).forEach(function (k) { if (!map[k]) setKey(k, null); });
+    Object.keys(map).forEach(function (k) {
+      if (/^[a-z0-9_.-]+$/i.test(k)) setKey(k, map[k]);
+    });
+    applied = map;
+  }
+  window.__cms = { defaults: defaults, apply: applyContent, current: function () { return applied; } };
+
+  // Show the last known edits right away, then refresh from the server.
+  if (!EDIT_MODE) applyContent(store("bj_content"));
+
+  var contentReady = fetch("/api/public" + (EDIT_MODE ? "?fresh=" + Date.now() : ""), { cache: EDIT_MODE ? "no-store" : "default" })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (d) {
+      applyContent(d.content);
+      if (!EDIT_MODE) store("bj_content", d.content || {});
+      return d;
+    })
+    .catch(function () { return null; });
+
   /* ---------------- Theme ---------------- */
   var toggles = $$(".js-theme-toggle");
 
@@ -68,6 +147,7 @@
 
   function handleCopy(btn, text) {
     text = text || ADDRESS;
+    track(text === ADDRESS ? "ip_copy" : "port_copy");
     copyText(text).then(function () {
       if (btn) flash(btn);
       showToast("Copied " + text);
@@ -86,9 +166,11 @@
     btn.addEventListener("click", function () {
       handleCopy(btn);
       var hint = $(".mini-copy__hint", btn);
-      if (hint) {
+      if (hint && !hint._busy) {
+        var label = hint.innerHTML;
+        hint._busy = true;
         hint.textContent = "Copied!";
-        setTimeout(function () { hint.textContent = "Copy"; }, 1800);
+        setTimeout(function () { hint.innerHTML = label; hint._busy = false; }, 1800);
       }
     });
   });
@@ -260,7 +342,10 @@
 
   /* ---------------- Reveal on scroll ---------------- */
   var reveals = $$(".reveal");
-  if ("IntersectionObserver" in window) {
+  function startReveal() {
+  if (EDIT_MODE) {
+    reveals.forEach(function (r) { r.classList.add("in"); });
+  } else if ("IntersectionObserver" in window) {
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) {
         if (e.isIntersecting) {
@@ -273,6 +358,75 @@
   } else {
     reveals.forEach(function (r) { r.classList.add("in"); });
   }
+  }
+  var revealStarted = false;
+  function revealOnce() { if (!revealStarted) { revealStarted = true; startReveal(); } }
+  contentReady.then(revealOnce);
+  setTimeout(revealOnce, 700);
+
+  /* ---------------- Noticeboard popup ---------------- */
+  function formatDate(iso) {
+    var d = new Date(iso);
+    if (isNaN(d)) return "";
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  function showNotices(list) {
+    var seen = store("bj_seen_notices") || {};
+    var toShow = (list || []).filter(function (n) {
+      return n.frequency !== "once" || seen[n.id] !== n.updated_at;
+    });
+    if (!toShow.length) return;
+
+    var overlay = document.createElement("div");
+    overlay.className = "nb-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-labelledby", "nb-title");
+
+    var board = document.createElement("div");
+    board.className = "nb";
+    board.innerHTML =
+      '<div class="nb__head"><img src="assets/img/map.png" alt=""><h2 id="nb-title">Noticeboard</h2></div>' +
+      '<div class="nb__list"></div>' +
+      '<div class="nb__foot"><button type="button" class="btn btn--green nb__ok"><span class="btn__label">Understood!</span><span></span></button></div>';
+
+    var listEl = board.querySelector(".nb__list");
+    toShow.forEach(function (n) {
+      var item = document.createElement("article");
+      item.className = "nb__item" + (n.pinned ? " nb__item--pinned" : "");
+      var h = document.createElement("h3");
+      h.textContent = n.title;
+      var meta = document.createElement("div");
+      meta.className = "nb__date";
+      meta.textContent = (n.pinned ? "Pinned \u00b7 " : "") + formatDate(n.updated_at);
+      var body = document.createElement("p");
+      body.textContent = n.body;
+      item.appendChild(h);
+      item.appendChild(meta);
+      item.appendChild(body);
+      listEl.appendChild(item);
+    });
+
+    overlay.appendChild(board);
+    document.body.appendChild(overlay);
+    document.documentElement.classList.add("nb-open");
+    requestAnimationFrame(function () { overlay.classList.add("show"); });
+
+    var ok = board.querySelector(".nb__ok");
+    setTimeout(function () { ok.focus({ preventScroll: true }); }, 50);
+    ok.addEventListener("click", function () {
+      toShow.forEach(function (n) { seen[n.id] = n.updated_at; });
+      store("bj_seen_notices", seen);
+      track("notice_ack");
+      overlay.classList.remove("show");
+      overlay.classList.add("hide");
+      document.documentElement.classList.remove("nb-open");
+      setTimeout(function () { overlay.remove(); }, 260);
+    });
+  }
+
+  if (!EDIT_MODE) contentReady.then(function (d) { if (d) showNotices(d.notices); });
 
   /* ---------------- Grass block follows the mouse a little ---------------- */
   var tilt = $(".js-tilt");
