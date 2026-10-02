@@ -27,65 +27,70 @@ const TODAY = "(now() AT TIME ZONE 'Asia/Kathmandu')::date";
    Router
    ========================================================= */
 export default async function handler(req, res) {
+  // Awaited here so errors from every async route land in this catch.
   try {
-    const url = new URL(req.url, "http://local");
-    const route = (url.searchParams.get("__route") ?? url.pathname.replace(/^\/api\/?/, ""))
-      .replace(/^\/+|\/+$/g, "");
-    const [a = "", b = ""] = route.split("/");
-    const m = req.method;
-    const q = url.searchParams;
-
-    if (m !== "GET" && m !== "HEAD") assertSameOrigin(req);
-
-    // ---- public ----
-    if (a === "public" && m === "GET") return publicData(req, res);
-    if (a === "track" && m === "POST") return track(req, res);
-    if (a === "media" && b && m === "GET") return getMedia(res, b);
-    if (a === "health" && m === "GET") return send(res, 200, { ok: true, db: dbConfigured() });
-
-    // ---- auth ----
-    if (a === "auth") {
-      if (b === "login" && m === "POST") return login(req, res);
-      if (b === "logout" && m === "POST") return send(res, 200, { ok: true }, { "Set-Cookie": clearCookie() });
-      if (b === "me" && m === "GET") return me(req, res);
-    }
-
-    const user = await requireUser(req);
-
-    if (a === "account") {
-      if (!b && m === "PATCH") return updateAccount(req, res, user);
-      if (b === "password" && m === "POST") return changeOwnPassword(req, res, user);
-    }
-    if (a === "notices") {
-      if (!b && m === "GET") return listNotices(res, user);
-      if (!b && m === "POST") return createNotice(req, res, user);
-      if (b && m === "PATCH") return updateNotice(req, res, user, b);
-      if (b && m === "DELETE") return deleteNotice(res, user, b);
-    }
-    if (a === "content") {
-      if (m === "GET") return listContent(res, user);
-      if (m === "PUT") return saveContent(req, res, user);
-    }
-    if (a === "media" && !b && m === "POST") return uploadMedia(req, res, user);
-    if (a === "stats") {
-      if (m === "GET") return getStats(res, user, q);
-      if (m === "DELETE") return resetStats(res, user);
-    }
-    if (a === "users") {
-      if (!b && m === "GET") return listUsers(res, user);
-      if (!b && m === "POST") return createUser(req, res, user);
-      if (b && m === "PATCH") return updateUser(req, res, user, b);
-      if (b && m === "DELETE") return deleteUser(res, user, b);
-    }
-    if (a === "roles" && b && m === "PUT") return updateRole(req, res, user, b);
-    if (a === "audit" && m === "GET") return listAudit(res, user, q);
-
-    throw new HttpError(404, "Not found");
+    await route(req, res);
   } catch (e) {
     if (e instanceof HttpError) return send(res, e.status, { error: e.message });
     console.error(e);
     return send(res, 500, { error: "Something went wrong on our side" });
   }
+}
+
+async function route(req, res) {
+  const url = new URL(req.url, "http://local");
+  const path = (url.searchParams.get("__route") ?? url.pathname.replace(/^\/api\/?/, ""))
+    .replace(/^\/+|\/+$/g, "");
+  const [a = "", b = ""] = path.split("/");
+  const m = req.method;
+  const q = url.searchParams;
+
+  if (m !== "GET" && m !== "HEAD") assertSameOrigin(req);
+
+  // ---- public ----
+  if (a === "public" && m === "GET") return publicData(req, res);
+  if (a === "track" && m === "POST") return track(req, res);
+  if (a === "media" && b && m === "GET") return getMedia(res, b);
+  if (a === "health" && m === "GET") return send(res, 200, { ok: true, db: dbConfigured() });
+
+  // ---- auth ----
+  if (a === "auth") {
+    if (b === "login" && m === "POST") return login(req, res);
+    if (b === "logout" && m === "POST") return send(res, 200, { ok: true }, { "Set-Cookie": clearCookie() });
+    if (b === "me" && m === "GET") return me(req, res);
+  }
+
+  const user = await requireUser(req);
+
+  if (a === "account") {
+    if (!b && m === "PATCH") return updateAccount(req, res, user);
+    if (b === "password" && m === "POST") return changeOwnPassword(req, res, user);
+  }
+  if (a === "notices") {
+    if (!b && m === "GET") return listNotices(res, user);
+    if (!b && m === "POST") return createNotice(req, res, user);
+    if (b && m === "PATCH") return updateNotice(req, res, user, b);
+    if (b && m === "DELETE") return deleteNotice(res, user, b);
+  }
+  if (a === "content") {
+    if (m === "GET") return listContent(res, user);
+    if (m === "PUT") return saveContent(req, res, user);
+  }
+  if (a === "media" && !b && m === "POST") return uploadMedia(req, res, user);
+  if (a === "stats") {
+    if (m === "GET") return getStats(res, user, q);
+    if (m === "DELETE") return resetStats(res, user);
+  }
+  if (a === "users") {
+    if (!b && m === "GET") return listUsers(res, user);
+    if (!b && m === "POST") return createUser(req, res, user);
+    if (b && m === "PATCH") return updateUser(req, res, user, b);
+    if (b && m === "DELETE") return deleteUser(res, user, b);
+  }
+  if (a === "roles" && b && m === "PUT") return updateRole(req, res, user, b);
+  if (a === "audit" && m === "GET") return listAudit(res, user, q);
+
+  throw new HttpError(404, "Not found");
 }
 
 /* =========================================================
