@@ -51,7 +51,11 @@ async function route(req, res) {
   if (a === "public" && m === "GET") return publicData(req, res);
   if (a === "track" && m === "POST") return track(req, res);
   if (a === "media" && b && m === "GET") return getMedia(res, b);
-  if (a === "health" && m === "GET") return send(res, 200, { ok: true, db: dbConfigured() });
+  if (a === "health" && m === "GET") {
+    // Setup flags only (never values), so config problems can be spotted from outside.
+    const secret = (process.env.SESSION_SECRET || "").length >= 32;
+    return send(res, 200, { ok: true, db: dbConfigured(), session: secret, owners: owners().length });
+  }
 
   // ---- auth ----
   if (a === "auth") {
